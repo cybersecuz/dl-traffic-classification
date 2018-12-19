@@ -2,8 +2,8 @@
 
 
 # import needed packages
-import time
-import keras, numpy, sklearn
+import sys, os, time, errno, datetime
+import keras, numpy, sklearn, imblearn.metrics, scipy
 from keras import optimizers
 from keras.models import Model
 from keras.models import Sequential
@@ -16,6 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.utils import to_categorical, plot_model
 from sklearn.model_selection import StratifiedKFold
 from sklearn import preprocessing
+from sklearn.metrics import confusion_matrix
 import pickle
 import seaborn as sns; sns.set()
 
@@ -38,7 +39,7 @@ def deserialize_dataset(pickle_dataset_filename):
       cat_lab_v2 =  pickle.load(pickle_dataset_file)
       cat_lab_v3 =  pickle.load(pickle_dataset_file)
 
-    input_dim = np.shape(samples)
+    input_dim = numpy.shape(samples)
     num_cls_v1 = numpy.max(cat_lab_v1) + 1
     num_cls_v2 = numpy.max(cat_lab_v2) + 1
     num_cls_v3 = numpy.max(cat_lab_v3) + 1
@@ -113,6 +114,8 @@ def compute_filtered_performance(model, samples_test, soft_values, categorical_l
     samples_test_filtered = samples_test[numpy.nonzero(pred_indices)]
     categorical_labels_test_filtered = categorical_labels_test[numpy.nonzero(pred_indices)]
 
+    num_classes = numpy.max(categorical_labels_test) + 1
+
     try:
         filtered_predictions = model.predict_classes(samples_test_filtered, verbose=2)
     except AttributeError:
@@ -122,7 +125,7 @@ def compute_filtered_performance(model, samples_test, soft_values, categorical_l
         except AttributeError:
             #self.debug_log.error('Empty list returned by model.predict()')
             sys.stderr.write('Empty list returned by model.predict()\n')
-            return numpy.nan, [], numpy.nan, numpy.nan, numpy.nan, numpy.nan, numpy.array([[numpy.nan] * self.num_classes, [numpy.nan] * self.num_classes]), numpy.nan
+            return numpy.nan, [], numpy.nan, numpy.nan, numpy.nan, numpy.nan, numpy.array([[numpy.nan] * num_classes, [numpy.nan] * num_classes]), numpy.nan
 
     filtered_accuracy = sklearn.metrics.accuracy_score(categorical_labels_test_filtered, filtered_predictions)
     filtered_fmeasure = sklearn.metrics.f1_score(categorical_labels_test_filtered, filtered_predictions, average='macro')
@@ -133,49 +136,50 @@ def compute_filtered_performance(model, samples_test, soft_values, categorical_l
 
     return categorical_labels_test_filtered, filtered_predictions, filtered_accuracy, filtered_fmeasure, filtered_gmean, filtered_macro_gmean, filtered_norm_cnf_matrix, filtered_classified_ratio
 
-def test_model(model, samples_train, categorical_labels_train, samples_test, categorical_labels_test):
+def test_model(model, output_index, samples_train, categorical_labels_train, samples_test, categorical_labels_test):
     '''
     Test the keras model given as input with predict_classes()
     '''
 
-    predictions = model.predict(samples_test, verbose=2).argmax(axis=-1)
+    
 
     # Calculate soft predictions and test time
     test_time_begin = time.time()
-    soft_values = model.predict(samples_test, verbose=2)
+    predictions = model.predict(samples_test, verbose=2)
     test_time_end = time.time()
     test_time = test_time_end - test_time_begin
+    print("Time elapsed for classifying: %f" % test_time)
 
-    training_predictions = model.predict(samples_train, verbose=2).argmax(axis=-1)
+    training_predictions = model.predict(samples_train, verbose=2)
 
-    # print(len(categorical_labels_test))
-    # print(categorical_labels_test)
+    #print(len(categorical_labels_test))
+    #print(categorical_labels_test)
 
-    # print(len(predictions))
-    # print(predictions)
+    #print(len(predictions))
+    #print(predictions)
 
     # print(len(soft_values))
     # print(soft_values)
 
     # Accuracy, F-measure, and g-mean
-    accuracy = sklearn.metrics.accuracy_score(categorical_labels_test, predictions)
-    fmeasure = sklearn.metrics.f1_score(categorical_labels_test, predictions, average='macro')
-    gmean = compute_g_mean(categorical_labels_test, predictions, categorical_labels_train)
-    macro_gmean = numpy.mean(imblearn.metrics.geometric_mean_score(categorical_labels_test, predictions, average=None))
+    accuracy = sklearn.metrics.accuracy_score(categorical_labels_test, predictions[output_index].argmax(axis=-1))
+    fmeasure = sklearn.metrics.f1_score(categorical_labels_test, predictions[output_index], average='macro')
+    gmean = compute_g_mean(categorical_labels_test, predictions[output_index])
+    macro_gmean = numpy.mean(imblearn.metrics.geometric_mean_score(categorical_labels_test, predictions[output_index], average=None))
 
     # Accuracy, F-measure, and g-mean on training set
-    training_accuracy = sklearn.metrics.accuracy_score(categorical_labels_train, training_predictions)
-    training_fmeasure = sklearn.metrics.f1_score(categorical_labels_train, training_predictions, average='macro')
-    training_gmean = compute_g_mean(categorical_labels_train, training_predictions, categorical_labels_test)
-    training_macro_gmean = numpy.mean(imblearn.metrics.geometric_mean_score(categorical_labels_train, training_predictions, average=None))
+    training_accuracy = sklearn.metrics.accuracy_score(categorical_labels_train, training_predictions[output_index])
+    training_fmeasure = sklearn.metrics.f1_score(categorical_labels_train, training_predictions[output_index], average='macro')
+    training_gmean = compute_g_mean(categorical_labels_train, training_predictions[output_index])
+    training_macro_gmean = numpy.mean(imblearn.metrics.geometric_mean_score(categorical_labels_train, training_predictions[output_index], average=None))
 
     # Confusion matrix
-    norm_cnf_matrix = compute_norm_confusion_matrix(categorical_labels_test, predictions, categorical_labels_train)
+    norm_cnf_matrix = compute_norm_confusion_matrix(categorical_labels_test, predictions[output_index], categorical_labels_train)
 
     # Top-K accuracy
     topk_accuracies = []
-    for k in self.K:
-        topk_accuracy = compute_topk_accuracy(soft_values, categorical_labels_test, k)
+    for k in range(1, 2):
+        topk_accuracy = compute_topk_accuracy(predictions[output_index], categorical_labels_test, k)
         topk_accuracies.append(topk_accuracy)
 
     # Accuracy, F-measure, g-mean, and confusion matrix with reject option (filtered)
@@ -187,9 +191,10 @@ def test_model(model, samples_train, categorical_labels_train, samples_test, cat
     filtered_gmeans = []
     filtered_macro_gmeans = []
     filtered_norm_cnf_matrices = []
-    for gamma in self.gamma_range:
+
+    for gamma in numpy.arange(0.0, 1.0, 0.1):
         categorical_labels_test_filtered, filtered_predictions, filtered_accuracy, filtered_fmeasure, filtered_gmean, filtered_macro_gmean, filtered_norm_cnf_matrix, filtered_classified_ratio = \
-        compute_filtered_performance(model, samples_test, soft_values, categorical_labels_test, gamma)
+        compute_filtered_performance(model, samples_test, predictions[output_index], categorical_labels_test, gamma)
         filtered_categorical_labels_test_list.append(categorical_labels_test_filtered)
         filtered_predictions_list.append(filtered_predictions)
         filtered_accuracies.append(filtered_accuracy)
@@ -203,20 +208,24 @@ def test_model(model, samples_train, categorical_labels_train, samples_test, cat
     filtered_categorical_labels_test_list, filtered_predictions_list, filtered_accuracies, filtered_fmeasures, filtered_gmeans, filtered_macro_gmeans, filtered_norm_cnf_matrices, filtered_classified_ratios
 
 
-
-samples_w,lab_v1,lab_v2,lab_v3 = deserialize_dataset('../recap-wang/dataset_preparation/576_data_categorical_categorical.pickle')
-print(np.shape(samples_w))
-
-
-num_cla_v1 = np.max(lab_v1) + 1
-num_cla_v2 = np.max(lab_v2) + 1
-num_cla_v3 = np.max(lab_v3) + 1
+# Deserializza il pickle e restituisce
+# - la matrice in cui ogni riga è un biflusso e le colonne sono i byte scelti
+# - 
+samples_w,lab_v1,lab_v2,lab_v3 = deserialize_dataset('../recap-wang/dataset_preparation/576_data_categorical.pickle')
+print(numpy.shape(samples_w))
 
 
-samples_w = samples_w[:,0:400]
-samples_w = np.expand_dims(samples_w, axis=2)
-wang_input_dim  = np.shape(samples_w)[1]
-print(np.shape(samples_w))
+num_cla_v1 = numpy.max(lab_v1) + 1
+num_cla_v2 = numpy.max(lab_v2) + 1
+num_cla_v3 = numpy.max(lab_v3) + 1
+
+# taglia a 400 i byte scelti
+# samples_w = samples_w[:,0:400]
+
+samples_w = numpy.expand_dims(samples_w, axis=2)
+wang_input_dim = numpy.shape(samples_w)[1]
+print(numpy.shape(samples_w))
+print(wang_input_dim)
 
 
 # define 10-fold cross validation test harness
@@ -265,40 +274,36 @@ for train, test in kfold.split(samples_w, lab_v3):
 #    catlab_lop_train = cat_lab_l[train]
 #    catlab_lop_test = cat_lab_l[test]
 
+# Ora sta bilanciando con dei pesi le varie label nel caso ci fossero troppi dati di una label rispetto ad un'altra
     ## Cost-sensitive loop for three views
     dic_1 = {}
     dic_2 = {}
     dic_3 = {}
 
-    wt_vec_v1 = np.zeros(num_cla_v1)  # vector of weights for cost-sensitive learning on view1
+    wt_vec_v1 = numpy.zeros(num_cla_v1)  # vector of weights for cost-sensitive learning on view1
 
     for i in range(0,num_cla_v1):
-           wt_vec_v1[i] = np.shape(samples_wan_train[labv1_wan_train == i,:])[0]
-           dic_1[i] = np.sum(wt_vec_v1) / wt_vec_v1[i]
+           wt_vec_v1[i] = numpy.shape(samples_wan_train[labv1_wan_train == i,:])[0]
+           dic_1[i] = numpy.sum(wt_vec_v1) / wt_vec_v1[i]
 #    print(wt_vec_v1)
-    print(dic_1)
 
     ## Cost-sensitive loop for three views
-    wt_vec_v2 = np.zeros(num_cla_v2)  # vector of weights for cost-sensitive learning on view1
+    wt_vec_v2 = numpy.zeros(num_cla_v2)  # vector of weights for cost-sensitive learning on view1
     for i in range(0,num_cla_v2):
-           wt_vec_v2[i] = np.shape(samples_wan_train[labv2_wan_train == i,:])[0]
-           dic_2[i] = np.sum(wt_vec_v2) / wt_vec_v2[i]
+           wt_vec_v2[i] = numpy.shape(samples_wan_train[labv2_wan_train == i,:])[0]
+           dic_2[i] = numpy.sum(wt_vec_v2) / wt_vec_v2[i]
 #    print(wt_vec_v2)
-    print(dic_2)
 
 
     ## Cost-sensitive loop for three views
-    wt_vec_v3 = np.zeros(num_cla_v3)  # vector of weights for cost-sensitive learning on view1
+    wt_vec_v3 = numpy.zeros(num_cla_v3)  # vector of weights for cost-sensitive learning on view1
     for i in range(0,num_cla_v3):
-           wt_vec_v3[i] = np.shape(samples_wan_train[labv3_wan_train == i,:])[0]
-           dic_3[i] = np.sum(wt_vec_v3) / wt_vec_v3[i]
+           wt_vec_v3[i] = numpy.shape(samples_wan_train[labv3_wan_train == i,:])[0]
+           dic_3[i] = numpy.sum(wt_vec_v3) / wt_vec_v3[i]
 #    print(wt_vec_v3)
-    print(dic_3)
 
 
-    class_imbalance_views = { 'VPN': dic_1,
-					      'Services': dic_2,
-						   'Apps': dic_3}
+    class_imbalance_views = {'VPN': dic_1, 'Services': dic_2, 'Apps': dic_3}
     print(class_imbalance_views)
 
     wang_payload = Input(shape = (wang_input_dim,1), name='payload')
@@ -324,11 +329,13 @@ for train, test in kfold.split(samples_w, lab_v3):
 
     multitask_model = Model(inputs=[wang_payload], outputs = [output_lv1,output_lv2,output_lv3])
 
-    multitask_model.compile(loss='categorical_crossentropy', optimizer= 'adam', metrics=['accuracy'],loss_weights=[0.4, 0.3, 0.3])
+    multitask_model.compile(loss='categorical_crossentropy', optimizer= 'adam', metrics=['accuracy'], loss_weights=[0.4, 0.3, 0.3])
 
-    earlystop_multitask = EarlyStopping(monitor='acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
+    earlystop_multitask_VPN_acc = EarlyStopping(monitor='VPN_acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
+    earlystop_multitask_Services_acc = EarlyStopping(monitor='Services_acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
+    earlystop_multitask_Apps_acc = EarlyStopping(monitor='Apps_acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
 
-    callbacks_list_multitask = [earlystop_multitask]
+    callbacks_list_multitask = [earlystop_multitask_VPN_acc, earlystop_multitask_Services_acc, earlystop_multitask_Apps_acc]
 
     one_hot_labv1_train = keras.utils.to_categorical(labv1_wan_train, num_cla_v1)
     one_hot_labv2_train = keras.utils.to_categorical(labv2_wan_train, num_cla_v2)
@@ -352,9 +359,9 @@ for train, test in kfold.split(samples_w, lab_v3):
     accuracy_v3 = sklearn.metrics.accuracy_score(labv3_wan_train, multitask_train_pred_v3)
     fmeas_v3 = sklearn.metrics.f1_score(labv3_wan_train, multitask_train_pred_v3, average='macro')
 
-    test_model(model=multitask_model, samples_train=samples_wan_train, categorical_labels_train=labv1_wan_train, samples_test=samples_wan_test, categorical_labels_test=labv1_wan_test)
-    test_model(model=multitask_model, samples_train=samples_wan_train, categorical_labels_train=labv2_wan_train, samples_test=samples_wan_test, categorical_labels_test=labv2_wan_test)
-    test_model(model=multitask_model, samples_train=samples_wan_train, categorical_labels_train=labv3_wan_train, samples_test=samples_wan_test, categorical_labels_test=labv3_wan_test)
+    #test_model(model=multitask_model, output_index=0, samples_train=samples_wan_train, categorical_labels_train=labv1_wan_train, samples_test=samples_wan_test, categorical_labels_test=labv1_wan_test)
+    #test_model(model=multitask_model, output_index=1, samples_train=samples_wan_train, categorical_labels_train=labv2_wan_train, samples_test=samples_wan_test, categorical_labels_test=labv2_wan_test)
+    #test_model(model=multitask_model, output_index=2, samples_train=samples_wan_train, categorical_labels_train=labv3_wan_train, samples_test=samples_wan_test, categorical_labels_test=labv3_wan_test)
 
     print("[Multitask] training_accuracy (v1): %.2f%%" % (accuracy_v1 * 100))
     print("[Multitask] training macro f-measure (v1): %.2f%%" % (fmeas_v1 * 100))
