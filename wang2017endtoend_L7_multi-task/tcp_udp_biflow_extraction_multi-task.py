@@ -30,6 +30,8 @@ class Biflow(object):
 		'''
 		
 		self.biflow = {}
+		self.m_packets = 32
+		
 		self.directory_out = directory_out
 		self.pcap_label = pcap_label
 		
@@ -44,10 +46,11 @@ class Biflow(object):
 		Extract and save in a dict the TCP and UDP payloads of each biflow
 		'''
 		
-		pcap_trace = rdpcap(self.extract_pcap)
+		# pcap_trace = rdpcap(self.extract_pcap)
+		pcap_reader = PcapReader(self.extract_pcap)
 		
 		# Payloads extraction
-		for packet in pcap_trace:
+		for packet in pcap_reader:
 			try:
 				# XXX: both TCP and UDP packets are considered
 				if packet.haslayer(IP) and (packet.haslayer(TCP) or packet.haslayer(UDP)) and packet.haslayer(Raw):
@@ -88,21 +91,21 @@ class Biflow(object):
 						inverse_quintuple = '%s,%s,%s' % (dst_socket, src_socket, proto)
 						# print inverse_quintuple
 						
-						# raise CustomBiflowException('Layer does not exist')
 						if quintuple not in self.biflow and inverse_quintuple not in self.biflow:
 							self.biflow[quintuple] = []
-							# self.biflow[quintuple].append('{}'.format(hexdump(data_payload)))
-							# self.biflow[quintuple].append('%s' % (str(data_payload)))
 							self.biflow[quintuple].append('{}'.format(str(payload_data)))
-							# print self.biflow
+							# print self.biflow[quintuple]
 						elif quintuple in self.biflow:
-							self.biflow[quintuple].append('{}'.format(str(payload_data)))
-							# print self.biflow
+							if len(self.biflow[quintuple]) < self.m_packets:
+								self.biflow[quintuple].append('{}'.format(str(payload_data)))
+							# print self.biflow[quintuple]
 						elif inverse_quintuple in self.biflow:
-							self.biflow[inverse_quintuple].append('{}'.format(str(payload_data)))
-							# print self.biflow
+							if len(self.biflow[inverse_quintuple]) < self.m_packets:
+								self.biflow[inverse_quintuple].append('{}'.format(str(payload_data)))
+							# print self.biflow[inverse_quintuple]
 						else:
-							logging.error('Packet does not belong to any biflow : %s --> %s' % (src_socket, dst_socket), exc_info=True)
+							sys.stderr.write('Packet does not belong to any biflow : %s --> %s\n' % (src_socket, dst_socket))
+							# logging.error('Packet does not belong to any biflow : %s --> %s' % (src_socket, dst_socket), exc_info=True)
 							# print self.biflow
 			except:
 				traceback.print_exc(file=sys.stdout)
