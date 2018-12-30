@@ -25,7 +25,6 @@ import seaborn as sns; sns.set()
 seed = 7
 numpy.random.seed(seed)
 
-
 def deserialize_dataset(pickle_dataset_filename):
     '''
 	Deserialize TC dataset to extract samples and (categorical) labels to perform classification using one of the state-of-the-art DL approaches
@@ -136,145 +135,37 @@ def compute_filtered_performance(model, samples_test, soft_values, categorical_l
 
     return categorical_labels_test_filtered, filtered_predictions, filtered_accuracy, filtered_fmeasure, filtered_gmean, filtered_macro_gmean, filtered_norm_cnf_matrix, filtered_classified_ratio
 
-if len(sys.argv) < 3:
-	print('Usage: ' + sys.argv[0] + ' <Categorical data file> <Models dir>')
+if len(sys.argv) < 2:
+	print('Usage: ' + sys.argv[0] + ' <Sample_pickle> <Models dir>')
 	sys.exit(1)
 
-samples_w,lab_v1,lab_v2,lab_v3 = deserialize_dataset(sys.argv[1])
+samples,lab_v1,lab_v2,lab_v3 = deserialize_dataset(sys.argv[1])
+samples = numpy.expand_dims(samples, axis=2)
 
-num_cla_v1 = numpy.max(lab_v1) + 1
-num_cla_v2 = numpy.max(lab_v2) + 1
-num_cla_v3 = numpy.max(lab_v3) + 1
-
-# taglia a 400 i byte scelti
-# samples_w = samples_w[:,0:400]
-
-samples_w = numpy.expand_dims(samples_w, axis=2)
-wang_input_dim = numpy.shape(samples_w)[1]
-print(numpy.shape(samples_w))
-print(wang_input_dim)
+models_dir = sys.argv[2]
 
 
-# define 10-fold cross validation test harness
-kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
-
-cvscores_eval = []
-cvscores_pred = []
-fscores_pred  = []
-
-#cvscores_pred_sum = []
-#fscores_pred_sum  = []
-#
-#cvscores_pred_max = []
-#fscores_pred_max  = []
-#
-#cvscores_pred_min = []
-#fscores_pred_min  = []
-#
-#cvscores_pred_mm = []
-#fscores_pred_mm  = []
-
-foldNum = 0
-
-# train and test are indices
-for train, test in kfold.split(samples_w, lab_v3):
-
-    foldNum = foldNum + 1
-    print("Fold no. %d" % (foldNum))
-
-    samples_wan_train = samples_w[train,:]
-    samples_wan_test  = samples_w[test,:]
-
-    labv1_wan_train  = lab_v1[train]
-    labv1_wan_test   = lab_v1[test]
-
-    labv2_wan_train  = lab_v2[train]
-    labv2_wan_test   = lab_v2[test]
-
-    labv3_wan_train  = lab_v3[train]
-    labv3_wan_test   = lab_v3[test]
-
-    dataset_filename = '%s/%d.pickle' % (sys.argv[2], foldNum)
+for foldNum in range(1,11):
     
-    if os.path.isfile(dataset_filename):
-        os.remove(dataset_filename)
+    with open('%s/%d.pickle' % (models_dir, foldNum), 'rb') as pickle_dataset_file:
+        samples_wan_train_indices = pickle.load(pickle_dataset_file)
+        samples_wan_test_indices = pickle.load(pickle_dataset_file)
     
-    with open(dataset_filename, 'wb') as dataset_file:
-        pickle.dump(train, dataset_file, pickle.HIGHEST_PROTOCOL)
-        pickle.dump(test, dataset_file, pickle.HIGHEST_PROTOCOL)
+    samples_wan_train = samples[samples_wan_train_indices,:]
+    samples_wan_test  = samples[samples_wan_test_indices,:]
+    
+    labv1_wan_train  = lab_v1[samples_wan_train_indices]
+    labv1_wan_test   = lab_v1[samples_wan_test_indices]
 
+    labv2_wan_train  = lab_v2[samples_wan_train_indices]
+    labv2_wan_test   = lab_v2[samples_wan_test_indices]
 
-# Ora sta bilanciando con dei pesi le varie label nel caso ci fossero troppi dati di una label rispetto ad un'altra
-    ## Cost-sensitive loop for three views
-    dic_1 = {}
-    dic_2 = {}
-    dic_3 = {}
+    labv3_wan_train  = lab_v3[samples_wan_train_indices]
+    labv3_wan_test   = lab_v3[samples_wan_test_indices]
 
-    wt_vec_v1 = numpy.zeros(num_cla_v1)  # vector of weights for cost-sensitive learning on view1
+    multitask_model = keras.models.load_model(models_dir + "/%d.h5" % (foldNum))
 
-    for i in range(0,num_cla_v1):
-           wt_vec_v1[i] = numpy.shape(samples_wan_train[labv1_wan_train == i,:])[0]
-           dic_1[i] = numpy.sum(wt_vec_v1) / wt_vec_v1[i]
-#    print(wt_vec_v1)
-
-    ## Cost-sensitive loop for three views
-    wt_vec_v2 = numpy.zeros(num_cla_v2)  # vector of weights for cost-sensitive learning on view1
-    for i in range(0,num_cla_v2):
-           wt_vec_v2[i] = numpy.shape(samples_wan_train[labv2_wan_train == i,:])[0]
-           dic_2[i] = numpy.sum(wt_vec_v2) / wt_vec_v2[i]
-#    print(wt_vec_v2)
-
-
-    ## Cost-sensitive loop for three views
-    wt_vec_v3 = numpy.zeros(num_cla_v3)  # vector of weights for cost-sensitive learning on view1
-    for i in range(0,num_cla_v3):
-           wt_vec_v3[i] = numpy.shape(samples_wan_train[labv3_wan_train == i,:])[0]
-           dic_3[i] = numpy.sum(wt_vec_v3) / wt_vec_v3[i]
-#    print(wt_vec_v3)
-
-
-    class_imbalance_views = {'VPN': dic_1, 'Services': dic_2, 'Apps': dic_3}
-    print(class_imbalance_views)
-
-    wang_payload = Input(shape = (wang_input_dim,1), name='payload')
-
-
-    # build 1D-CNN, according to Wang end2end paper
-    w =  Conv1D(filters = 32, kernel_size = 25, strides = 1, padding = 'same', activation='relu')(wang_payload)
-    w =  MaxPooling1D(pool_size = 3, strides = None, padding = 'same') (w)
-    w =  Conv1D(filters = 64, kernel_size = 25, strides = 1, padding = 'same', activation='relu') (w)
-    w =  MaxPooling1D(pool_size = 3, strides = None, padding = 'same') (w)
-    w =  Flatten() (w)
-    w = BatchNormalization() (w)
-    w = Dropout(0.2) (w)
-    w =  Dense(100, activation = 'relu') (w)
-
-
-#    y = concatenate([interm_wang, interm_lop])
-    w = BatchNormalization() (w)
-    w =  Dropout(0.3) (w)
-    output_lv1 = Dense(num_cla_v1,  activation = 'softmax', name='VPN')(w)
-    output_lv2 = Dense(num_cla_v2,  activation = 'softmax', name='Services')(w)
-    output_lv3 = Dense(num_cla_v3,  activation = 'softmax', name = 'Apps')(w)
-
-    multitask_model = Model(inputs=[wang_payload], outputs = [output_lv1,output_lv2,output_lv3])
-
-    multitask_model.compile(loss='categorical_crossentropy', optimizer= 'adam', metrics=['accuracy'], loss_weights=[0.4, 0.3, 0.3])
-
-    earlystop_multitask_VPN_acc = EarlyStopping(monitor='VPN_acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
-    earlystop_multitask_Services_acc = EarlyStopping(monitor='Services_acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
-    earlystop_multitask_Apps_acc = EarlyStopping(monitor='Apps_acc', min_delta = 0.01, patience=5, verbose=1, mode='auto')
-
-    callbacks_list_multitask = [earlystop_multitask_VPN_acc, earlystop_multitask_Services_acc, earlystop_multitask_Apps_acc]
-
-    one_hot_labv1_train = keras.utils.to_categorical(labv1_wan_train, num_cla_v1)
-    one_hot_labv2_train = keras.utils.to_categorical(labv2_wan_train, num_cla_v2)
-    one_hot_labv3_train = keras.utils.to_categorical(labv3_wan_train, num_cla_v3)
-
-    multitask_model.fit(x = [samples_wan_train], y = [one_hot_labv1_train,one_hot_labv2_train,one_hot_labv3_train], epochs= 50,  batch_size = 50, class_weight=class_imbalance_views, callbacks = callbacks_list_multitask, verbose=2)
-    multitask_model.save(sys.argv[2] + "/%d.h5" % (foldNum))
-
-    print('Training phase completed')
+    print("Loaded model %d" % (foldNum))
 
     [soft_values_multitask_train_v1,soft_values_multitask_train_v2,soft_values_multitask_train_v3] = multitask_model.predict(samples_wan_train,verbose=2)
     multitask_train_pred_v1 = soft_values_multitask_train_v1.argmax(axis=-1)
