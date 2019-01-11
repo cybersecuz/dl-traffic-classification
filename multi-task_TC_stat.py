@@ -208,6 +208,9 @@ for foldNum in range(1,11):
     fmeas_mt_v1 = sklearn.metrics.f1_score(labv1_wan_test, multitask_test_pred_v1, average='macro')
     print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v1 * 100))
     print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v1 * 100))
+    print(".:Confusion Matrix v1")
+    norm_conf_matriv_v1 = compute_norm_confusion_matrix(labv1_wan_test, multitask_test_pred_v1, labv1_wan_test)
+    print(norm_conf_matriv_v1)
 
     accuracy_mt_v2 = sklearn.metrics.accuracy_score(labv2_wan_test, multitask_test_pred_v2)
     fmeas_mt_v2 = sklearn.metrics.f1_score(labv2_wan_test, multitask_test_pred_v2, average='macro')
@@ -215,6 +218,9 @@ for foldNum in range(1,11):
     print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v2 * 100))
     print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v2 * 100))
     print("[Multitask] predicted macro top3 accuracy: %.2f%%" % (top3_accouracy_v2 * 100))
+    print(".:Confusion Matrix v2")
+    norm_conf_matriv_v2 = compute_norm_confusion_matrix(labv2_wan_test, multitask_test_pred_v2, labv2_wan_test)
+    print(norm_conf_matriv_v2)
 
     accuracy_mt_v3 = sklearn.metrics.accuracy_score(labv3_wan_test, multitask_test_pred_v3)
     fmeas_mt_v3 = sklearn.metrics.f1_score(labv3_wan_test, multitask_test_pred_v3, average='macro')
@@ -222,5 +228,8 @@ for foldNum in range(1,11):
     print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v3 * 100))
     print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v3 * 100))
     print("[Multitask] predicted macro top3 accuracy: %.2f%%" % (top3_accouracy_v3 * 100))
+    print(".:Confusion Matrix v3")
+    norm_conf_matriv_v3 = compute_norm_confusion_matrix(labv3_wan_test, multitask_test_pred_v3, labv3_wan_test)
+    print(norm_conf_matriv_v3)
 
     print('test completato')
