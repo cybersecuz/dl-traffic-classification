@@ -272,64 +272,7 @@ for train, test in kfold.split(samples_w, lab_v3):
     one_hot_labv3_train = keras.utils.to_categorical(labv3_wan_train, num_cla_v3)
 
     multitask_model.fit(x = [samples_wan_train], y = [one_hot_labv1_train,one_hot_labv2_train,one_hot_labv3_train], epochs= 50,  batch_size = 50, class_weight=class_imbalance_views, callbacks = callbacks_list_multitask, verbose=2)
-    multitask_model.save(sys.argv[2] + "/%d.h5" % (foldNum))
-
     print('Training phase completed')
-
-    [soft_values_multitask_train_v1,soft_values_multitask_train_v2,soft_values_multitask_train_v3] = multitask_model.predict(samples_wan_train,verbose=2)
-    multitask_train_pred_v1 = soft_values_multitask_train_v1.argmax(axis=-1)
-    multitask_train_pred_v2 = soft_values_multitask_train_v2.argmax(axis=-1)
-    multitask_train_pred_v3 = soft_values_multitask_train_v3.argmax(axis=-1)
-
-    accuracy_v1 = sklearn.metrics.accuracy_score(labv1_wan_train, multitask_train_pred_v1)
-    fmeas_v1 = sklearn.metrics.f1_score(labv1_wan_train, multitask_train_pred_v1, average='macro')
-    gmean_v1 = compute_g_mean(labv1_wan_train, multitask_train_pred_v1)
-
-    accuracy_v2 = sklearn.metrics.accuracy_score(labv2_wan_train, multitask_train_pred_v2)
-    fmeas_v2 = sklearn.metrics.f1_score(labv2_wan_train, multitask_train_pred_v2, average='macro')
-    gmean_v2 = compute_g_mean(labv2_wan_train, multitask_train_pred_v2)
-
-    accuracy_v3 = sklearn.metrics.accuracy_score(labv3_wan_train, multitask_train_pred_v3)
-    fmeas_v3 = sklearn.metrics.f1_score(labv3_wan_train, multitask_train_pred_v3, average='macro')
-    gmean_v3 = compute_g_mean(labv3_wan_train, multitask_train_pred_v3)
-
-    print("[Multitask] training_accuracy (v1): %.2f%%" % (accuracy_v1 * 100))
-    print("[Multitask] training macro f-measure (v1): %.2f%%" % (fmeas_v1 * 100))
-    print("[Multitask] training g-mean (v1): %.2f%%" % (gmean_v1 * 100))
-
-    print("[Multitask] training_accuracy (v2): %.2f%%" % (accuracy_v2 * 100))
-    print("[Multitask] training macro f-measure (v2): %.2f%%" % (fmeas_v2 * 100))
-    print("[Multitask] training g-mean (v2): %.2f%%" % (gmean_v2 * 100))
-
-    print("[Multitask] training_accuracy (v3): %.2f%%" % (accuracy_v3 * 100))
-    print("[Multitask] training macro f-measure (v3): %.2f%%" % (fmeas_v3 * 100))
-    print("[Multitask] training g-mean (v3): %.2f%%" % (gmean_v3 * 100))
-
-
-    # test with predict_classes (multimodal)
-    [soft_values_multitask_test_v1,soft_values_multitask_test_v2,soft_values_multitask_test_v3] = multitask_model.predict([samples_wan_test],verbose=2)
-    multitask_test_pred_v1 = soft_values_multitask_test_v1.argmax(axis=-1)
-    multitask_test_pred_v2 = soft_values_multitask_test_v2.argmax(axis=-1)
-    multitask_test_pred_v3 = soft_values_multitask_test_v3.argmax(axis=-1)
-
-
-    accuracy_mt_v1 = sklearn.metrics.accuracy_score(labv1_wan_test, multitask_test_pred_v1)
-    fmeas_mt_v1 = sklearn.metrics.f1_score(labv1_wan_test, multitask_test_pred_v1, average='macro')
-    print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v1 * 100))
-    print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v1 * 100))
-
-    accuracy_mt_v2 = sklearn.metrics.accuracy_score(labv2_wan_test, multitask_test_pred_v2)
-    fmeas_mt_v2 = sklearn.metrics.f1_score(labv2_wan_test, multitask_test_pred_v2, average='macro')
-    top3_accouracy_v2 = compute_topk_accuracy(soft_values_multitask_test_v2, labv2_wan_test, 3)
-    print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v2 * 100))
-    print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v2 * 100))
-    print("[Multitask] predicted macro top3 accuracy: %.2f%%" % (top3_accouracy_v2 * 100))
-
-    accuracy_mt_v3 = sklearn.metrics.accuracy_score(labv3_wan_test, multitask_test_pred_v3)
-    fmeas_mt_v3 = sklearn.metrics.f1_score(labv3_wan_test, multitask_test_pred_v3, average='macro')
-    top3_accouracy_v3 = compute_topk_accuracy(soft_values_multitask_test_v3, labv3_wan_test, 3)
-    print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v3 * 100))
-    print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v3 * 100))
-    print("[Multitask] predicted macro top3 accuracy: %.2f%%" % (top3_accouracy_v3 * 100))
-
-    print('test completato')
+    
+    multitask_model.save(sys.argv[2] + "/%d.h5" % (foldNum))
+    print('Models saved')

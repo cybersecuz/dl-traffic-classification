@@ -4,6 +4,7 @@
 # import needed packages
 import sys, os, time, errno, datetime
 import keras, numpy, sklearn, imblearn.metrics, scipy
+import pandas as pd
 from keras import optimizers
 from keras.models import Model
 from keras.models import Sequential
@@ -136,7 +137,7 @@ def compute_filtered_performance(model, samples_test, soft_values, categorical_l
     return categorical_labels_test_filtered, filtered_predictions, filtered_accuracy, filtered_fmeasure, filtered_gmean, filtered_macro_gmean, filtered_norm_cnf_matrix, filtered_classified_ratio
 
 if len(sys.argv) < 2:
-	print('Usage: ' + sys.argv[0] + ' <Sample_pickle> <Models dir>')
+	print('Usage: ' + sys.argv[0] + ' <Sample_pickle> <Models dir> <conf-matrix-dir>')
 	sys.exit(1)
 
 samples,lab_v1,lab_v2,lab_v3 = deserialize_dataset(sys.argv[1])
@@ -144,9 +145,44 @@ samples = numpy.expand_dims(samples, axis=2)
 
 models_dir = sys.argv[2]
 
+label_class_VPN_nonVPN = {
+			0: {
+				0: 'VPN',
+				1: 'nonVPN'
+			},
+			1: {
+				0: 'Chat',
+				1: 'Email',
+				2: 'FileTransfer',
+				3: 'P2P',
+				4: 'Streaming',
+				5: 'VoIP',
+			},
+			2: {
+				0: 'aim',
+				1: 'email',
+				2: 'facebook',
+				3: 'ftps',
+				4: 'hangouts',
+				5: 'icq',
+				6: 'netflix',
+				7: 'scp',
+				8: 'sftp',
+				9: 'skype',
+				10: 'spotify',
+				11: 'torrent',
+                12: 'vimeo',
+				13: 'voipbuster',
+				14: 'youtube'
+			}
+        }
+
+conf_matrices_v1 = []
+conf_matrices_v2 = []
+conf_matrices_v3 = []
 
 for foldNum in range(1,11):
-    
+
     with open('%s/%d.pickle' % (models_dir, foldNum), 'rb') as pickle_dataset_file:
         samples_wan_train_indices = pickle.load(pickle_dataset_file)
         samples_wan_test_indices = pickle.load(pickle_dataset_file)
@@ -203,14 +239,18 @@ for foldNum in range(1,11):
     multitask_test_pred_v2 = soft_values_multitask_test_v2.argmax(axis=-1)
     multitask_test_pred_v3 = soft_values_multitask_test_v3.argmax(axis=-1)
 
-
     accuracy_mt_v1 = sklearn.metrics.accuracy_score(labv1_wan_test, multitask_test_pred_v1)
     fmeas_mt_v1 = sklearn.metrics.f1_score(labv1_wan_test, multitask_test_pred_v1, average='macro')
     print("[Multitask] predicted_accuracy: %.2f%%" % (accuracy_mt_v1 * 100))
     print("[Multitask] predicted macro f-measure: %.2f%%" % (fmeas_mt_v1 * 100))
-    print(".:Confusion Matrix v1")
     norm_conf_matriv_v1 = compute_norm_confusion_matrix(labv1_wan_test, multitask_test_pred_v1, labv1_wan_test)
-    print(norm_conf_matriv_v1)
+    conf_matrices_v1.append(norm_conf_matriv_v1)
+    # for i in range(numpy.shape(norm_conf_matriv_v1)[0]):
+    #     for i in range(numpy.shape(norm_conf_matriv_v1)[1]):
+    #         print(""norm_conf_matriv_v1[i][j])
+    # headers = label_class_VPN_nonVPN[0]
+    # df = pd.DataFrame(norm_conf_matriv_v1, columns=headers, index=headers)
+    # df.to_csv('%s/v1.csv' % sys.argv[2])
 
     accuracy_mt_v2 = sklearn.metrics.accuracy_score(labv2_wan_test, multitask_test_pred_v2)
     fmeas_mt_v2 = sklearn.metrics.f1_score(labv2_wan_test, multitask_test_pred_v2, average='macro')
@@ -220,7 +260,8 @@ for foldNum in range(1,11):
     print("[Multitask] predicted macro top3 accuracy: %.2f%%" % (top3_accouracy_v2 * 100))
     print(".:Confusion Matrix v2")
     norm_conf_matriv_v2 = compute_norm_confusion_matrix(labv2_wan_test, multitask_test_pred_v2, labv2_wan_test)
-    print(norm_conf_matriv_v2)
+    conf_matrices_v2.append(norm_conf_matriv_v2)
+
 
     accuracy_mt_v3 = sklearn.metrics.accuracy_score(labv3_wan_test, multitask_test_pred_v3)
     fmeas_mt_v3 = sklearn.metrics.f1_score(labv3_wan_test, multitask_test_pred_v3, average='macro')
@@ -230,6 +271,14 @@ for foldNum in range(1,11):
     print("[Multitask] predicted macro top3 accuracy: %.2f%%" % (top3_accouracy_v3 * 100))
     print(".:Confusion Matrix v3")
     norm_conf_matriv_v3 = compute_norm_confusion_matrix(labv3_wan_test, multitask_test_pred_v3, labv3_wan_test)
-    print(norm_conf_matriv_v3)
+    conf_matrices_v3.append(norm_conf_matriv_v3)
 
     print('test completato')
+
+conf_1 = numpy.mean(conf_matrices_v1, axis=0)
+conf_2 = numpy.mean(conf_matrices_v2, axis=0)
+conf_3 = numpy.mean(conf_matrices_v3, axis=0)
+
+print(conf_1)
+print(conf_2)
+print(conf_3)
